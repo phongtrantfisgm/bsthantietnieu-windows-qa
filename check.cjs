@@ -74,7 +74,7 @@ async function layout(page) {
       dark:matchMedia('(prefers-color-scheme: dark)').matches,
       h1:document.querySelector('h1')?.textContent.trim(),
       headingWeight:getComputedStyle(document.querySelector('h1')).fontWeight,
-      headingSize:getComputedStyle(document.querySelector('h1')).fontSize,
+      headingShadow:getComputedStyle(document.querySelector('h1')).textShadow,
       headingStroke:getComputedStyle(document.querySelector('h1')).getPropertyValue('-webkit-text-stroke-width'),
     };
   });
@@ -159,7 +159,8 @@ async function main() {
           row.light = await layout(page);
           assert.ok(row.light.h1);
           assert.equal(row.light.headingWeight, '700');
-          assert.ok(Math.abs(parseFloat(row.light.headingStroke) / parseFloat(row.light.headingSize) - .02) < .0001);
+          assert.equal(parseFloat(row.light.headingStroke), 0);
+          assert.notEqual(row.light.headingShadow, 'none');
           assert.equal(row.light.body, 'rgb(255, 255, 255)');
           assert.equal(row.light.dark, false);
           const expected = {
