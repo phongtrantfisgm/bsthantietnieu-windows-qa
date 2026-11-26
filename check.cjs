@@ -154,7 +154,7 @@ async function main() {
           row.form = await auditForm(page);
           row.light = await layout(page);
           assert.ok(row.light.h1);
-          assert.equal(row.light.headingWeight, '800');
+          assert.equal(row.light.headingWeight, '700');
           assert.ok(parseFloat(row.light.headingStroke) > 0);
           assert.equal(row.light.body, 'rgb(255, 255, 255)');
           assert.equal(row.light.dark, false);
