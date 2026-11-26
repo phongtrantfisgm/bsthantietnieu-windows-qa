@@ -73,6 +73,8 @@ async function layout(page) {
       scheme:getComputedStyle(document.documentElement).colorScheme,
       dark:matchMedia('(prefers-color-scheme: dark)').matches,
       h1:document.querySelector('h1')?.textContent.trim(),
+      headingWeight:getComputedStyle(document.querySelector('h1')).fontWeight,
+      headingStroke:getComputedStyle(document.querySelector('h1')).getPropertyValue('-webkit-text-stroke-width'),
     };
   });
 }
@@ -152,6 +154,8 @@ async function main() {
           row.form = await auditForm(page);
           row.light = await layout(page);
           assert.ok(row.light.h1);
+          assert.equal(row.light.headingWeight, '800');
+          assert.ok(parseFloat(row.light.headingStroke) > 0);
           assert.equal(row.light.body, 'rgb(255, 255, 255)');
           assert.equal(row.light.dark, false);
           const expected = {
