@@ -1,0 +1,41 @@
+name: Chrome on Windows 11
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-chrome:
+    runs-on: windows-11-arm
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - name: Identify the OS and check the installed fonts
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          $os | Select-Object Caption, Version, BuildNumber, OSArchitecture | Format-List
+          if ($os.Caption -notmatch 'Windows 11') { throw "Expected Windows 11" }
+          $keys = @('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts', 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts')
+          $fonts = foreach ($key in $keys) {
+            if (Test-Path $key) { (Get-ItemProperty -Path $key).PSObject.Properties.Name }
+          }
+          if ($fonts -match 'SF Pro|San Francisco|New York') { throw "Apple font installed" }
+          Write-Host "Apple fonts absent. Found Arial: $([bool]($fonts -match '^Arial '))"
+          $appearance = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+          New-Item -Path $appearance -Force | Out-Null
+          New-ItemProperty -Path $appearance -Name AppsUseLightTheme -Value 0 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path $appearance -Name SystemUsesLightTheme -Value 0 -PropertyType DWord -Force | Out-Null
+      - name: Check the public site
+        run: |
+          npm install --no-audit --no-fund --no-save playwright-core@1.65.1 pngjs@7.0.0
+          node check.cjs
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: windows-11-chrome-evidence
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 3
