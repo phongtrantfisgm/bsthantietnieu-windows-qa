@@ -160,6 +160,13 @@ async function main() {
             '/gap-bac-si/':['Đội ngũ bác sĩ','Tiết niệu – Nam khoa'],
           }[path];
           if(expected) assert.deepEqual(row.light.headings[0].map(text=>text.replace(/\u00a0/g,' ')),expected);
+          if(path==='/gap-bac-si/') {
+            row.introGap = await page.locator('h1').evaluate(title=>
+              title.nextElementSibling.getBoundingClientRect().top - title.getBoundingClientRect().bottom
+            );
+            assert.ok(row.introGap >= 23.9 && row.introGap <= 40.1, `Intro gap: ${row.introGap}px`);
+            console.log('Team title to intro:', width, row.introGap);
+          }
           if(path==='/suc-khoe-tinh-duc-nam/') {
             assert.deepEqual(row.light.headings[1].map(text=>text.replace(/\u00a0/g,' ')),['Rối loạn chức năng','tình dục nam']);
           }
