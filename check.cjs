@@ -3,6 +3,7 @@ const { PNG } = require('pngjs');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const assert = require('node:assert/strict');
 const os = require('node:os');
+const { createHash } = require('node:crypto');
 
 const origin = 'https://bsthantietnieu.com';
 const pages = [
@@ -11,7 +12,7 @@ const pages = [
   '/gap-bac-si/', '/chinh-sach-bao-mat/',
 ];
 const result = [];
-const viewports = [320, 390, 768, 1280, 1920];
+const viewports = [320, 390, 480, 768, 1280, 1920];
 const out = 'evidence';
 mkdirSync(out, { recursive: true });
 
@@ -59,6 +60,7 @@ async function layout(page) {
       const style = getComputedStyle(el);
       const canvas = document.createElement('canvas').getContext('2d');
       canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      if (style.appearance === 'base-select') return {id:el.id,clipped:[]};
       const available=el.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)-12;
       return {
         id:el.id,
@@ -81,6 +83,18 @@ async function auditForm(page) {
   await form.waitFor({ state: 'visible', timeout: 12000 });
   await page.locator('#visit_intent').selectOption('book');
   await page.locator('#need').selectOption('tuyen-tien-liet');
+  const options = page.locator('#clinical_signal option:not([hidden]):not([disabled])');
+  const texts = await options.allTextContents();
+  const longest = texts.indexOf(texts.reduce((a,b)=>a.length>b.length?a:b,''));
+  const value = await options.nth(longest).getAttribute('value');
+  const longSelect = page.locator('#clinical_signal');
+  await longSelect.selectOption(value);
+  const selectedLayout = await longSelect.evaluate(el => {
+    const css = getComputedStyle(el);
+    return { appearance:css.appearance, height:el.clientHeight, lineHeight:parseFloat(css.lineHeight) };
+  });
+  assert.equal(selectedLayout.appearance, 'base-select');
+  assert.ok(selectedLayout.height > selectedLayout.lineHeight * 2, JSON.stringify(selectedLayout));
   await page.locator('#full_name').fill('Kiểm thử tiếng Việt');
   await page.locator('#phone').fill('0900000000');
   await page.locator('#has_results').check();
@@ -121,15 +135,34 @@ async function main() {
         try {
           await page.emulateMedia({ colorScheme: 'light' });
           await session.send('Emulation.setAutoDarkModeOverride', { enabled: false });
+          const cssResponse = page.waitForResponse(res => /\/assets\/site-[0-9a-f]{12}\.css$/.test(res.url()), {timeout:30000})
+            .catch(error=>error);
           const response = await page.goto(origin + path, { waitUntil: 'domcontentloaded', timeout: 30000 });
           assert.ok(response.ok(), `HTTP ${response.status()}`);
           await page.waitForSelector('body[data-public="1"]', { state: 'attached', timeout: 12000 });
+          const css = await cssResponse;
+          if (css instanceof Error) throw css;
+          assert.ok(css.ok(), `stylesheet HTTP ${css.status()}`);
+          row.css = new URL(css.url()).pathname;
+          const hash = createHash('sha256').update(await css.body()).digest('hex').slice(0,12);
+          assert.equal(row.css, `/assets/site-${hash}.css`);
           await page.evaluate(()=>document.fonts.ready);
+          const rejectStatistics = page.getByRole('button', { name: 'Từ chối', exact: true });
+          if (await rejectStatistics.isVisible()) await rejectStatistics.click();
           row.form = await auditForm(page);
           row.light = await layout(page);
           assert.ok(row.light.h1);
           assert.equal(row.light.body, 'rgb(255, 255, 255)');
           assert.equal(row.light.dark, false);
+          const expected = {
+            '/tan-soi/':['Viên sỏi nhỏ.','Quyết định không nhỏ.'],
+            '/tieu-gap-son-tieu/':['Tiểu gấp, són tiểu.','Bạn không cần cố chịu.'],
+            '/gap-bac-si/':['Đội ngũ bác sĩ','Tiết niệu – Nam khoa'],
+          }[path];
+          if(expected) assert.deepEqual(row.light.headings[0].map(text=>text.replace(/\u00a0/g,' ')),expected);
+          if(path==='/suc-khoe-tinh-duc-nam/') {
+            assert.deepEqual(row.light.headings[1].map(text=>text.replace(/\u00a0/g,' ')),['Rối loạn chức năng','tình dục nam']);
+          }
           row.fonts = {
             heading: await fonts(session, 'h1'),
             body: await fonts(session, '.story, .policy p'),
