@@ -74,6 +74,7 @@ async function layout(page) {
       dark:matchMedia('(prefers-color-scheme: dark)').matches,
       h1:document.querySelector('h1')?.textContent.trim(),
       headingWeight:getComputedStyle(document.querySelector('h1')).fontWeight,
+      headingSize:getComputedStyle(document.querySelector('h1')).fontSize,
       headingStroke:getComputedStyle(document.querySelector('h1')).getPropertyValue('-webkit-text-stroke-width'),
     };
   });
@@ -125,7 +126,10 @@ async function main() {
       const context = await browser.newContext({ viewport: { width, height: 950 }, locale: 'vi-VN', reducedMotion: 'reduce' });
       await context.route('**/*', route => {
         const req = route.request();
-        return req.method() === 'GET' && new URL(req.url()).origin === origin ? route.continue() : route.abort();
+        const url = new URL(req.url());
+        const isPublicPortrait = req.resourceType() === 'image' && url.origin === 'https://saigonmedicine.com' &&
+          url.pathname.startsWith('/wp-content/uploads/2026/07/');
+        return req.method() === 'GET' && (url.origin === origin || isPublicPortrait) ? route.continue() : route.abort();
       });
       const page = await context.newPage();
       const session = await context.newCDPSession(page);
@@ -155,7 +159,7 @@ async function main() {
           row.light = await layout(page);
           assert.ok(row.light.h1);
           assert.equal(row.light.headingWeight, '700');
-          assert.ok(parseFloat(row.light.headingStroke) > 0);
+          assert.ok(Math.abs(parseFloat(row.light.headingStroke) / parseFloat(row.light.headingSize) - .02) < .0001);
           assert.equal(row.light.body, 'rgb(255, 255, 255)');
           assert.equal(row.light.dark, false);
           const expected = {
@@ -199,6 +203,19 @@ async function main() {
             assert.equal(color, 'rgb(0, 0, 0)', id);
           }
           const key = path === '/' ? 'home' : path.slice(1,-1);
+          if (key === 'gap-bac-si' && width === 1280) {
+            await page.locator('.docs').scrollIntoViewIfNeeded();
+            row.portraits = await page.locator('.docs').evaluate(async cards => {
+              await Promise.allSettled([...cards.querySelectorAll('img')].map(img => img.decode()));
+              return [...cards.querySelectorAll('.doc .ph')].map(placeholder => {
+                const img = placeholder.querySelector('img');
+                return { loaded: Boolean(img?.naturalWidth), width: img?.naturalWidth || 0 };
+              });
+            });
+            console.log('Doctor portraits:', row.portraits.filter(x=>x.loaded).length, '/', row.portraits.length);
+            await page.evaluate(() => window.scrollTo(0,0));
+            await page.screenshot({ fullPage:true, path:`${out}/gap-bac-si-full-dark.png` });
+          }
           if (width===390 || width===1280) {
             await page.evaluate(() => window.scrollTo(0,0));
             const png = await page.screenshot({ path: `${out}/${key}-${width}-dark.png` });
